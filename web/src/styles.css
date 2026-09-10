@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body { @apply m-0 bg-ink font-sans text-paper antialiased; }
+  button, input, textarea { font: inherit; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+}
+
+@layer components {
+  .field { @apply w-full rounded-none border border-white/20 bg-white/[0.035] px-4 py-3 text-paper outline-none transition-colors focus:border-signal; }
+  .eyebrow { @apply font-mono text-[0.68rem] uppercase tracking-[0.18em] text-white/50; }
+  .section-title { @apply text-2xl font-medium tracking-tight md:text-3xl; }
+  .status-dot { @apply block h-2 w-2 rounded-full bg-signal; }
+  .panel-strip { @apply grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5; }
+  .panel-thumb { @apply relative overflow-hidden border border-transparent bg-black text-left opacity-65 transition-all; }
+  .panel-thumb.active { @apply border-signal opacity-100; }
+  .panel-thumb img { @apply aspect-video w-full object-cover; }
+  .panel-thumb span { @apply absolute bottom-1.5 left-2 font-mono text-[0.65rem] text-white drop-shadow; }
+  .empty-frame { @apply flex min-h-32 items-center justify-center border border-dashed border-white/15 p-5 text-center text-sm text-white/35; }
+}

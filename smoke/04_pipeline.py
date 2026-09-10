@@ -139,7 +139,7 @@ def main():
     for query in ("character=JUNE", "int_ext=EXT", "tone=tense"):
         try:
             hits = get_json(f"/api/search?{query}")
-            print(f"  {query:<18} -> {len(hits)} assets")
+            print(f"  {query:<18} -> {len(hits['assets'])} assets")
         except Exception as error:  # noqa: BLE001
             print(f"  {query:<18} -> FAILED: {error}")
 

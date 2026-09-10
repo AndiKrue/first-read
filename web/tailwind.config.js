@@ -4,9 +4,11 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: '#0c0d0f',
-        paper: '#e7e4dc',
-        signal: '#c9ff63',
+        ink: '#07090c',
+        paper: '#f1eee7',
+        signal: '#d3ff79',
+        muted: 'var(--fr-text-muted)',
+        subtle: 'var(--fr-text-subtle)',
       },
       fontFamily: {
         sans: ['Inter', 'Arial', 'sans-serif'],

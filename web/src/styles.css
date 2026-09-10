@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --fr-text-muted: #b9b8b3;
+    --fr-text-subtle: #94968f;
+  }
+
   * { box-sizing: border-box; }
   body { @apply m-0 bg-ink font-sans text-paper antialiased; }
   button, input, textarea { font: inherit; }
@@ -11,13 +16,43 @@
 
 @layer components {
   .field { @apply w-full rounded-none border border-white/20 bg-white/[0.035] px-4 py-3 text-paper outline-none transition-colors focus:border-signal; }
-  .eyebrow { @apply font-mono text-[0.68rem] uppercase tracking-[0.18em] text-white/50; }
+  .eyebrow { @apply font-mono text-[0.68rem] uppercase tracking-[0.18em] text-subtle; }
   .section-title { @apply text-2xl font-medium tracking-tight md:text-3xl; }
   .status-dot { @apply block h-2 w-2 rounded-full bg-signal; }
-  .panel-strip { @apply grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5; }
-  .panel-thumb { @apply relative overflow-hidden border border-transparent bg-black text-left opacity-65 transition-all; }
+  .panel-strip { @apply grid min-w-0 grid-cols-2 gap-3 overflow-x-auto md:grid-cols-3 lg:grid-cols-5; }
+  .panel-thumb { @apply relative overflow-hidden border border-transparent bg-black text-left opacity-80 transition-all; }
   .panel-thumb.active { @apply border-signal opacity-100; }
   .panel-thumb img { @apply aspect-video w-full object-cover; }
   .panel-thumb span { @apply absolute bottom-1.5 left-2 font-mono text-[0.65rem] text-white drop-shadow; }
-  .empty-frame { @apply flex min-h-32 items-center justify-center border border-dashed border-white/15 p-5 text-center text-sm text-white/35; }
+  .empty-frame { @apply flex min-h-32 items-center justify-center border border-dashed border-white/15 p-5 text-center text-sm text-subtle; }
+
+  .tap-target {
+    min-inline-size: 2.75rem;
+    min-block-size: 2.75rem;
+    overflow-wrap: anywhere;
+  }
+
+  :where(button, summary, a[href], input[type='checkbox']) {
+    min-inline-size: 2.75rem;
+    min-block-size: 2.75rem;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid theme('colors.signal');
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px theme('colors.ink');
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

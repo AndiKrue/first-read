@@ -232,7 +232,7 @@ function App() {
     <main className="mx-auto min-h-screen max-w-7xl px-5 py-8 md:px-10 md:py-12">
       <header className="mb-12 flex items-baseline justify-between border-b border-white/15 pb-5">
         <h1 className="text-xl font-semibold tracking-[0.24em]">FIRST READ</h1>
-        <p className="font-mono text-xs uppercase tracking-widest text-white/45">Script → voice → frame</p>
+        <p className="font-mono text-xs uppercase tracking-widest text-subtle">Script → voice → frame</p>
       </header>
 
       <form onSubmit={hearIt} className="grid gap-5">
@@ -241,7 +241,7 @@ function App() {
           <input value={title} onChange={(event) => setTitle(event.target.value)} required className="field text-lg" />
         </label>
         <details className="border border-white/15 bg-white/[0.02]">
-          <summary className="cursor-pointer px-4 py-3 text-sm text-white/65 hover:text-white">Write me a scene</summary>
+          <summary className="cursor-pointer px-4 py-3 text-sm text-muted hover:text-white">Write me a scene</summary>
           <div className="grid gap-4 border-t border-white/10 p-4 md:grid-cols-2">
             <label className="grid gap-2">
               <span className="eyebrow">Genre</span>
@@ -260,8 +260,8 @@ function App() {
               <input value={storySpec.situation} onChange={(event) => setStorySpec({ ...storySpec, situation: event.target.value })} placeholder="a small favor reveals a much larger secret" className="field" />
             </label>
             <div className="flex flex-wrap items-center gap-3 md:col-span-2">
-              <button type="button" disabled={writing} onClick={() => void randomizeStory()} className="border border-white/25 px-4 py-2 text-xs uppercase tracking-wider hover:border-signal disabled:opacity-40">Randomize</button>
-              <button type="button" disabled={writing || !storySpec.genre.trim()} onClick={() => void writeStory()} className="bg-white/10 px-4 py-2 text-xs uppercase tracking-wider hover:bg-signal hover:text-ink disabled:opacity-40">{writing ? 'Writing…' : 'Write it'}</button>
+              <button type="button" disabled={writing} onClick={() => void randomizeStory()} className="tap-target border border-white/25 px-4 py-2 text-xs uppercase tracking-wider hover:border-signal disabled:opacity-70">Randomize</button>
+              <button type="button" disabled={writing || !storySpec.genre.trim()} onClick={() => void writeStory()} className="tap-target bg-white/10 px-4 py-2 text-xs uppercase tracking-wider hover:bg-signal hover:text-ink disabled:opacity-70">{writing ? 'Writing…' : 'Write it'}</button>
               {storyError && <span role="alert" className="text-xs text-red-300">{storyError}</span>}
             </div>
           </div>
@@ -270,7 +270,7 @@ function App() {
           <span className="eyebrow">Sample scenes</span>
           <div className="mt-2 flex flex-wrap gap-2">
             {samples.map((sample) => (
-              <button key={sample.name} type="button" onClick={() => selectSample(sample)} className="border border-white/20 px-3 py-2 font-mono text-xs text-white/70 hover:border-signal hover:text-white">{sample.name}</button>
+              <button key={sample.name} type="button" onClick={() => selectSample(sample)} className="tap-target border border-white/20 px-3 py-2 font-mono text-xs text-muted hover:border-signal hover:text-white">{sample.name}</button>
             ))}
           </div>
         </div>
@@ -281,9 +281,9 @@ function App() {
         <div className="grid max-w-xl gap-2">
           <label className="eyebrow" htmlFor="api-key">Optional Google API key</label>
           <input id="api-key" type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} className="field" />
-          <p className="text-xs text-white/45">Used only for this generation request to bypass the shared demo cap; it is not stored.</p>
+          <p className="text-xs text-subtle">Used only for this generation request to bypass the shared demo cap; it is not stored.</p>
         </div>
-        <button disabled={isRunning} className="w-fit bg-signal px-7 py-3 text-sm font-bold uppercase tracking-widest text-ink transition-opacity disabled:opacity-40">
+        <button disabled={isRunning} className="tap-target w-fit bg-signal px-7 py-3 text-sm font-bold uppercase tracking-widest text-ink transition-opacity disabled:opacity-70">
           {isRunning ? `Working — ${run.stage}` : 'Hear it'}
         </button>
       </form>
@@ -299,7 +299,7 @@ function App() {
       <section className="mb-14">
         <div className="mb-4 flex items-end justify-between">
           <h2 className="section-title">Storyboard</h2>
-          <span className="font-mono text-xs text-white/45">{run.panel_urls.length} frames</span>
+          <span className="font-mono text-xs text-subtle">{run.panel_urls.length} frames</span>
         </div>
         <div className="panel-strip">
           {run.panel_urls.map((url, index) => (
@@ -328,7 +328,7 @@ function App() {
         <h2 className="section-title mb-6">Find an earlier beat</h2>
         <form onSubmit={search} className="flex max-w-2xl gap-3">
           <input value={query} onChange={(event) => setQuery(event.target.value)} className="field min-w-0 flex-1" placeholder="Character name, night exterior, or tone" />
-          <button disabled={searching} className="border border-white/30 px-5 text-sm uppercase tracking-wider hover:border-signal disabled:opacity-40">Search</button>
+          <button disabled={searching} className="tap-target border border-white/30 px-5 text-sm uppercase tracking-wider hover:border-signal disabled:opacity-70">Search</button>
         </form>
         <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {results.map((asset) => (
@@ -336,7 +336,7 @@ function App() {
               {asset.asset_type === 'panel' ? <img src={asset.url} alt={asset.scene_slug} className="aspect-video w-full object-cover" /> : <div className="empty-frame aspect-video">{asset.asset_type}</div>}
               <div className="p-4">
                 <p className="font-mono text-xs text-signal">{asset.scene_slug}</p>
-                <p className="mt-2 text-sm text-white/60">{asset.characters.join(', ')} · {asset.tone}</p>
+                <p className="mt-2 text-sm text-muted">{asset.characters.join(', ')} · {asset.tone}</p>
               </div>
             </article>
           ))}
@@ -353,7 +353,7 @@ function App() {
               <div className="p-4">
                 <p className="text-base">{previous.script_title}</p>
                 <p className="mt-2 font-mono text-xs text-signal">{previous.scene_slug || 'Awaiting slugline'}</p>
-                <p className="mt-2 text-xs uppercase tracking-wider text-white/45">{previous.stage}</p>
+                <p className="mt-2 text-xs uppercase tracking-wider text-subtle">{previous.stage}</p>
               </div>
             </button>
           ))}

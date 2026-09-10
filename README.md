@@ -45,7 +45,7 @@ Open `http://localhost:8000`. The browser sends generation requests to `POST /ap
 ## Architecture
 
 - `src/first_read/agent.py` defines an ADK `LlmAgent` root with breakdown, storyboard, table-read, and assembly sub-agents exposed as `AgentTool` instances. This graph is the Gemini Enterprise Agent Platform integration surface; `src/first_read/api.py` runs the same stage functions in order as a background task for the web application.
-- `gemini-3-pro-preview` handles ADK orchestration and primary breakdown reasoning; `gemini-2.5-pro` is the breakdown fallback; `gemini-2.5-flash-image` creates character sheets and storyboard panels; `gemini-2.5-pro-tts` performs the multi-speaker audio.
+- `gemini-2.5-pro` handles ADK orchestration and breakdown reasoning, with `gemini-2.5-flash` as the fallback; `gemini-2.5-flash-image` creates character sheets and storyboard panels; `gemini-2.5-pro-tts` performs the multi-speaker audio.
 - ClickHouse stores indexed asset metadata, reusable character continuity, and durable run state. Direct writes and read-only MCP queries are deliberately separate.
 - Google Cloud Storage holds character sheets, panels, WAV table reads, and MP4 animatics under stable `gs://` identifiers; the API turns those identifiers into browser URLs.
 - ffmpeg gives each panel a uniform hold of at least 2.5 seconds, pads short audio when needed, and encodes H.264 video with AAC audio.

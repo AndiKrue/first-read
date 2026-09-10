@@ -3,8 +3,8 @@
 import os
 from pathlib import Path
 
-REASONING_MODEL = "gemini-3-pro-preview"
-REASONING_FALLBACK_MODEL = "gemini-2.5-pro"
+REASONING_MODEL = "gemini-2.5-pro"
+REASONING_FALLBACK_MODEL = "gemini-2.5-flash"
 STORYBOARD_MODEL = "gemini-2.5-flash-image"
 TABLE_READ_MODEL = "gemini-2.5-pro-tts"
 

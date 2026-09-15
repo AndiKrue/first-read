@@ -1,6 +1,8 @@
 """ClickHouse write path for durable production metadata."""
 
 import threading
+import uuid
+from datetime import UTC, datetime
 
 import clickhouse_connect
 
@@ -26,28 +28,6 @@ CREATE TABLE IF NOT EXISTS assets (
   gcs_uri          String,
   duration_seconds Float32
 ) ENGINE = MergeTree ORDER BY (scene_slug, asset_type, created_at)
-"""
-
-CHARACTERS_DDL = """
-CREATE TABLE IF NOT EXISTS characters (
-  name               String,
-  first_seen         DateTime DEFAULT now(),
-  visual_description String,
-  wardrobe           String DEFAULT '',
-  voice_name         LowCardinality(String),
-  script_title       String,
-  sheet_gcs_uri      String DEFAULT ''
-) ENGINE = ReplacingMergeTree ORDER BY name
-"""
-
-CHARACTERS_SHEET_ALTER = """
-ALTER TABLE characters
-ADD COLUMN IF NOT EXISTS sheet_gcs_uri String DEFAULT ''
-"""
-
-CHARACTERS_WARDROBE_ALTER = """
-ALTER TABLE characters
-ADD COLUMN IF NOT EXISTS wardrobe String DEFAULT ''
 """
 
 RUNS_DDL = """
@@ -148,9 +128,6 @@ def initialize_schema() -> None:
             return
         client = get_client()
         client.command(ASSETS_DDL)
-        client.command(CHARACTERS_DDL)
-        client.command(CHARACTERS_SHEET_ALTER)
-        client.command(CHARACTERS_WARDROBE_ALTER)
         client.command(RUNS_DDL)
         _SCHEMA_READY = True
 
@@ -175,48 +152,132 @@ def upsert_run(record: RunRecord) -> None:
 
 
 def upsert_character(character: Character, script_title: str) -> None:
+    del script_title  # Retained for the public pipeline's existing call contract.
     client = get_client()
-    existing = client.query(
-        "SELECT sheet_gcs_uri FROM characters FINAL WHERE name = {name:String} LIMIT 1",
-        parameters={"name": character.name},
-    ).result_rows
-    sheet_gcs_uri = existing[0][0] if existing else ""
+    existing = _current_character(client, character.name)
+    if existing:
+        (
+            character_id,
+            version,
+            sheet_gcs_uri,
+            locked_fields,
+            origin_id,
+            visitor_id,
+            owner_id,
+            _,
+        ) = existing
+    else:
+        character_id = str(uuid.uuid4())
+        version = 0
+        sheet_gcs_uri = ""
+        locked_fields = []
+        origin_id = ""
+        visitor_id = ""
+        owner_id = ""
     client.insert(
-        "characters",
+        "characters_v3",
         [
             [
+                character_id,
+                version + 1,
                 character.name,
                 character.visual_description,
                 character.wardrobe,
                 character.voice_name,
-                script_title,
                 sheet_gcs_uri,
+                locked_fields,
+                origin_id,
+                visitor_id,
+                owner_id,
+                datetime.now(UTC),
             ]
         ],
         column_names=[
+            "character_id",
+            "version",
             "name",
             "visual_description",
             "wardrobe",
             "voice_name",
-            "script_title",
             "sheet_gcs_uri",
+            "locked_fields",
+            "origin_id",
+            "visitor_id",
+            "owner_id",
+            "created_at",
         ],
     )
 
 
 def upsert_character_sheet(name: str, uri: str) -> None:
     """Persist a sheet URI without replacing the character's fixed attributes."""
-    get_client().command(
-        """
-        INSERT INTO characters (
-          name, first_seen, visual_description, wardrobe, voice_name, script_title,
-          sheet_gcs_uri
-        )
-        SELECT
-          name, first_seen, visual_description, wardrobe, voice_name, script_title,
-          {uri:String}
-        FROM characters FINAL
-        WHERE name = {name:String}
-        """,
-        parameters={"name": name, "uri": uri},
+    client = get_client()
+    existing = _current_character(client, name)
+    if not existing:
+        raise LookupError(f"Character not found: {name}")
+    (
+        character_id,
+        version,
+        _,
+        locked_fields,
+        origin_id,
+        visitor_id,
+        owner_id,
+        _,
+    ) = existing
+    current = client.query(
+        "SELECT name, visual_description, wardrobe, voice_name "
+        "FROM characters_v3 "
+        "WHERE character_id = {character_id:String} AND version = {version:UInt32} "
+        "LIMIT 1",
+        parameters={"character_id": character_id, "version": version},
+    ).result_rows[0]
+    client.insert(
+        "characters_v3",
+        [
+            [
+                character_id,
+                version + 1,
+                *current,
+                uri,
+                locked_fields,
+                origin_id,
+                visitor_id,
+                owner_id,
+                datetime.now(UTC),
+            ]
+        ],
+        column_names=[
+            "character_id",
+            "version",
+            "name",
+            "visual_description",
+            "wardrobe",
+            "voice_name",
+            "sheet_gcs_uri",
+            "locked_fields",
+            "origin_id",
+            "visitor_id",
+            "owner_id",
+            "created_at",
+        ],
     )
+
+
+def _current_character(client, name: str):
+    """Return the current row for the newest identity carrying ``name``."""
+    rows = client.query(
+        "SELECT character_id, version, sheet_gcs_uri, locked_fields, origin_id, "
+        "visitor_id, owner_id, created_at FROM ("
+        "SELECT character_id, max(version) AS version, "
+        "argMax(name, version) AS name, argMax(sheet_gcs_uri, version) AS sheet_gcs_uri, "
+        "argMax(locked_fields, version) AS locked_fields, "
+        "argMax(origin_id, version) AS origin_id, "
+        "argMax(visitor_id, version) AS visitor_id, "
+        "argMax(owner_id, version) AS owner_id, "
+        "argMax(created_at, version) AS created_at "
+        "FROM characters_v3 GROUP BY character_id"
+        ") WHERE name = {name:String} ORDER BY created_at DESC, character_id DESC LIMIT 1",
+        parameters={"name": name},
+    ).result_rows
+    return rows[0] if rows else None

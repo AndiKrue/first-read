@@ -100,9 +100,15 @@ async def lookup_characters(names: list[str]) -> dict[str, dict[str, str]]:
         return {}
     name_list = ", ".join(_quote(name) for name in names)
     rows = await _run_query(
-        "SELECT name, visual_description, wardrobe, voice_name, sheet_gcs_uri "
-        "FROM characters FINAL "
-        f"WHERE name IN ({name_list})"
+        "SELECT name, visual_description, wardrobe, voice_name, sheet_gcs_uri FROM ("
+        "SELECT character_id, argMax(name, version) AS name, "
+        "argMax(visual_description, version) AS visual_description, "
+        "argMax(wardrobe, version) AS wardrobe, "
+        "argMax(voice_name, version) AS voice_name, "
+        "argMax(sheet_gcs_uri, version) AS sheet_gcs_uri, "
+        "argMax(created_at, version) AS created_at "
+        "FROM characters_v3 GROUP BY character_id"
+        f") WHERE name IN ({name_list}) ORDER BY created_at, character_id"
     )
     return {
         row["name"]: {

@@ -55,7 +55,7 @@ Open `http://localhost:8000`. The browser sends generation requests to `POST /ap
 ClickHouse is the production memory used during generation and replay, not an analytics add-on.
 
 - The `assets` table indexes every sheet, panel, audio file, and animatic by run, asset type, script, scene, beat, shot, interior/exterior, time of day, location, characters, tone, prompt, model, GCS URI, and duration.
-- The `characters` table keeps each name's visual description, scene wardrobe, voice casting, script title, and reusable character-sheet URI.
+- The shared `characters_v3` table keeps versioned character identities. This public service reads only the highest version for each `character_id` and does not expose identity history or cloning.
 - The `runs` table checkpoints stage, error, breakdown, panel URIs, audio URI, animatic URI, duration, and scene metadata. `GET /api/runs` and `GET /api/runs/{run_id}` read the latest stored version, which makes completed and partial runs available after a process restart.
 - DDL and inserts travel through `clickhouse-connect` in `src/first_read/store.py`. Each produced asset is inserted immediately, and run transitions append versions to a `ReplacingMergeTree`.
 - Reads travel through the official `mcp-clickhouse` MCP server wired as an ADK `McpToolset` in `src/first_read/memory.py`. The stdio server is forced read-only and exposes only query and metadata tools.
@@ -66,7 +66,16 @@ This is the exact character lookup issued for JUNE:
 
 ```sql
 SELECT name, visual_description, wardrobe, voice_name, sheet_gcs_uri
-FROM characters FINAL
+FROM (
+  SELECT character_id,
+    argMax(name, version) AS name,
+    argMax(visual_description, version) AS visual_description,
+    argMax(wardrobe, version) AS wardrobe,
+    argMax(voice_name, version) AS voice_name,
+    argMax(sheet_gcs_uri, version) AS sheet_gcs_uri
+  FROM characters_v3
+  GROUP BY character_id
+)
 WHERE name IN ('JUNE')
 ```
 

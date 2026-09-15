@@ -149,18 +149,28 @@ def _run_response(record: RunRecord) -> RunResponse:
         if record.breakdown_json
         else None
     )
+
+    def browser_url(uri: str) -> str | None:
+        if not uri:
+            return None
+        try:
+            return signed_url_for_uri(uri)
+        except ValueError:
+            return None
+
+    panel_urls = [url for uri in record.panel_uris if (url := browser_url(uri))]
+    audio_url = browser_url(record.audio_uri)
+    animatic_url = browser_url(record.animatic_uri)
     return RunResponse(
         run_id=record.run_id,
         script_title=record.script_title,
         scene_slug=record.scene_slug,
         stage=record.stage,
         breakdown=breakdown,
-        panel_urls=[signed_url_for_uri(uri) for uri in record.panel_uris],
-        audio_url=signed_url_for_uri(record.audio_uri) if record.audio_uri else None,
-        audio_duration_seconds=(record.duration_seconds if record.audio_uri else None),
-        animatic_url=(
-            signed_url_for_uri(record.animatic_uri) if record.animatic_uri else None
-        ),
+        panel_urls=panel_urls,
+        audio_url=audio_url,
+        audio_duration_seconds=(record.duration_seconds if audio_url else None),
+        animatic_url=animatic_url,
         error=record.error or None,
     )
 

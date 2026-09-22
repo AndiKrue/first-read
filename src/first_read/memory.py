@@ -168,7 +168,9 @@ async def list_runs(limit: int = 24) -> list[RunRecord]:
     """Return the newest durable version of each recent run."""
     safe_limit = max(1, min(int(limit), 200))
     rows = await _run_query(
-        f"SELECT {_RUN_SELECT} FROM runs FINAL "
+        f"SELECT {_RUN_SELECT} FROM ("
+        f"SELECT {_RUN_SELECT} FROM runs "
+        "ORDER BY updated_at DESC LIMIT 1 BY run_id) "
         f"ORDER BY created_at DESC LIMIT {safe_limit}"
     )
     return [RunRecord.model_validate(row) for row in rows]
@@ -176,6 +178,9 @@ async def list_runs(limit: int = 24) -> list[RunRecord]:
 
 async def get_run(run_id: str) -> RunRecord | None:
     rows = await _run_query(
-        f"SELECT {_RUN_SELECT} FROM runs FINAL WHERE run_id = {_quote(run_id)} LIMIT 1"
+        f"SELECT {_RUN_SELECT} FROM ("
+        f"SELECT {_RUN_SELECT} FROM runs "
+        "ORDER BY updated_at DESC LIMIT 1 BY run_id) "
+        f"WHERE run_id = {_quote(run_id)} LIMIT 1"
     )
     return RunRecord.model_validate(rows[0]) if rows else None

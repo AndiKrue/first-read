@@ -88,7 +88,11 @@ root_agent = LlmAgent(
         "output of the stage before it. "
         "Keep run_id, the full breakdown, and each produced asset URL in session "
         "state. Never assemble before both panels and measured audio exist. Use "
-        "the ClickHouse MCP tools for read-only production-memory questions."
+        "the ClickHouse MCP tools for read-only production-memory questions. "
+        "Never use the FINAL modifier: this ClickHouse service runs "
+        "SharedMergeTree and rejects it. To read the current row of a "
+        "versioned table, order by the version column and take one row per "
+        "key with LIMIT 1 BY."
     ),
     tools=[
         AgentTool(story_agent),

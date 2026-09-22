@@ -4,7 +4,6 @@ from google.adk.agents import LlmAgent
 from google.adk.tools import AgentTool, FunctionTool
 from pydantic import BaseModel, Field
 
-from first_read.memory import get_mcp_toolset
 from first_read.models import REASONING_MODEL
 from first_read.tools.assemble import assemble_tool
 from first_read.tools.breakdown import breakdown_tool
@@ -88,11 +87,7 @@ root_agent = LlmAgent(
         "output of the stage before it. "
         "Keep run_id, the full breakdown, and each produced asset URL in session "
         "state. Never assemble before both panels and measured audio exist. Use "
-        "the ClickHouse MCP tools for read-only production-memory questions. "
-        "Never use the FINAL modifier: this ClickHouse service runs "
-        "SharedMergeTree and rejects it. To read the current row of a "
-        "versioned table, order by the version column and take one row per "
-        "key with LIMIT 1 BY."
+        "the stage tools above; they persist their own results."
     ),
     tools=[
         AgentTool(story_agent),
@@ -100,6 +95,5 @@ root_agent = LlmAgent(
         AgentTool(storyboard_agent),
         AgentTool(tableread_agent),
         AgentTool(assembly_agent),
-        get_mcp_toolset(),
     ],
 )

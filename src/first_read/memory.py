@@ -107,7 +107,7 @@ async def lookup_characters(names: list[str]) -> dict[str, dict[str, str]]:
         "argMax(voice_name, version) AS voice_name, "
         "argMax(sheet_gcs_uri, version) AS sheet_gcs_uri, "
         "argMax(created_at, version) AS created_at "
-        "FROM characters_v3 GROUP BY character_id"
+        "FROM characters GROUP BY character_id"
         f") WHERE name IN ({name_list}) ORDER BY created_at, character_id"
     )
     return {

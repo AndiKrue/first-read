@@ -175,7 +175,7 @@ def upsert_character(character: Character, script_title: str) -> None:
         visitor_id = ""
         owner_id = ""
     client.insert(
-        "characters_v3",
+        "characters",
         [
             [
                 character_id,
@@ -227,13 +227,13 @@ def upsert_character_sheet(name: str, uri: str) -> None:
     ) = existing
     current = client.query(
         "SELECT name, visual_description, wardrobe, voice_name "
-        "FROM characters_v3 "
+        "FROM characters "
         "WHERE character_id = {character_id:String} AND version = {version:UInt32} "
         "LIMIT 1",
         parameters={"character_id": character_id, "version": version},
     ).result_rows[0]
     client.insert(
-        "characters_v3",
+        "characters",
         [
             [
                 character_id,
@@ -276,7 +276,7 @@ def _current_character(client, name: str):
         "argMax(visitor_id, version) AS visitor_id, "
         "argMax(owner_id, version) AS owner_id, "
         "argMax(created_at, version) AS created_at "
-        "FROM characters_v3 GROUP BY character_id"
+        "FROM characters GROUP BY character_id"
         ") WHERE name = {name:String} ORDER BY created_at DESC, character_id DESC LIMIT 1",
         parameters={"name": name},
     ).result_rows

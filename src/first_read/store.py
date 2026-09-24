@@ -3,6 +3,7 @@
 import threading
 import uuid
 from datetime import UTC, datetime
+from functools import lru_cache
 
 import clickhouse_connect
 
@@ -88,6 +89,11 @@ RUN_COLUMNS = (
     "duration_seconds",
 )
 
+# Columns the shared production ``runs`` table carries beyond RUNS_DDL. This
+# service never declares or adds them; ``upsert_run`` writes one only when the
+# record has a value for it and the table actually has the column.
+OPTIONAL_RUN_COLUMNS = ("panel_beat_ids",)
+
 
 _LOCAL = threading.local()
 
@@ -142,12 +148,38 @@ def insert_asset(asset: Asset) -> None:
     )
 
 
+@lru_cache(maxsize=1)
+def run_table_columns() -> frozenset[str]:
+    """Column names of the ``runs`` table, read once per process."""
+    rows = (
+        get_client()
+        .query(
+            "SELECT name FROM system.columns "
+            "WHERE database = currentDatabase() AND table = 'runs'"
+        )
+        .result_rows
+    )
+    return frozenset(row[0] for row in rows)
+
+
 def upsert_run(record: RunRecord) -> None:
-    """Append a new run version for ReplacingMergeTree to collapse on reads."""
+    """Append a new run version for ReplacingMergeTree to collapse on reads.
+
+    A record without optional values (every new run) inserts exactly
+    RUN_COLUMNS, as it always has. A resumed run that restored its beat ids also
+    writes ``panel_beat_ids``, but only where the shared table has that column,
+    so every later version keeps them.
+    """
+    columns = list(RUN_COLUMNS)
+    columns.extend(
+        column
+        for column in OPTIONAL_RUN_COLUMNS
+        if getattr(record, column) and column in run_table_columns()
+    )
     get_client().insert(
         "runs",
-        [[getattr(record, column) for column in RUN_COLUMNS]],
-        column_names=list(RUN_COLUMNS),
+        [[getattr(record, column) for column in columns]],
+        column_names=columns,
     )
 
 

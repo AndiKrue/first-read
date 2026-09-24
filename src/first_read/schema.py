@@ -60,7 +60,10 @@ class Beat(BaseModel):
     @classmethod
     def _names_only(cls, value):
         if isinstance(value, list):
-            return [item.get("name", "") if isinstance(item, dict) else item for item in value]
+            return [
+                item.get("name", "") if isinstance(item, dict) else item
+                for item in value
+            ]
         return value
 
     @field_validator("beat_id", mode="before")
@@ -166,3 +169,16 @@ class RunRecord(BaseModel):
     audio_uri: str = ""
     animatic_uri: str = ""
     duration_seconds: float = 0.0
+    # The beat each ``panel_uris`` entry depicts. The column exists in the shared
+    # production ``runs`` table (the private tree writes it) but not in this
+    # service's DDL; it is read and written only where the table has it, and new
+    # public runs leave it empty. See ``store.upsert_run``.
+    panel_beat_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("panel_beat_ids", mode="before")
+    @classmethod
+    def _beat_ids_as_strings(cls, value: object) -> object:
+        """Beat ids are keyed as strings everywhere, as in ``Beat.beat_id``."""
+        if isinstance(value, list):
+            return [str(item) for item in value]
+        return value

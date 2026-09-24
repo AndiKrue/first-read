@@ -184,3 +184,33 @@ async def get_run(run_id: str) -> RunRecord | None:
         f"WHERE run_id = {_quote(run_id)} LIMIT 1"
     )
     return RunRecord.model_validate(rows[0]) if rows else None
+
+
+# Shared-table columns beyond _RUN_SELECT; mirrors store.OPTIONAL_RUN_COLUMNS.
+_OPTIONAL_RUN_COLUMNS = ("panel_beat_ids",)
+_TERMINAL_STAGES = "('done', 'failed', 'cancelled')"
+
+
+async def get_run_for_resume(run_id: str) -> RunRecord | None:
+    """Read the newest version of one run, with the shared optional columns.
+
+    ``panel_beat_ids`` is selected only when the ``runs`` table has it: the
+    shared production table does, a stand-alone public database does not.
+    ``updated_at`` has one-second resolution, so a tie is broken towards the
+    terminal version — within one execution the terminal write is always last.
+    """
+    present = await _run_query(
+        "SELECT name FROM system.columns "
+        "WHERE database = currentDatabase() AND table = 'runs' AND name IN ("
+        + ", ".join(_quote(column) for column in _OPTIONAL_RUN_COLUMNS)
+        + ")"
+    )
+    names = {row.get("name") for row in present}
+    select = ", ".join(
+        [_RUN_SELECT, *(column for column in _OPTIONAL_RUN_COLUMNS if column in names)]
+    )
+    rows = await _run_query(
+        f"SELECT {select} FROM runs WHERE run_id = {_quote(run_id)} "
+        f"ORDER BY updated_at DESC, stage IN {_TERMINAL_STAGES} DESC LIMIT 1"
+    )
+    return RunRecord.model_validate(rows[0]) if rows else None

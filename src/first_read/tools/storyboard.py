@@ -1,11 +1,11 @@
-import time
 """Generate independently framed storyboard panels from character sheets."""
 
 import asyncio
 import hashlib
 import re
 import threading
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Collection
 from concurrent.futures import ThreadPoolExecutor
 
 from google import genai
@@ -255,7 +255,14 @@ def generate_storyboard(
     run_id: str,
     script_title: str,
     on_panel: Callable[[int, int, PanelOutput], None] | None = None,
+    positions: Collection[int] | None = None,
 ) -> list[PanelOutput]:
+    """Render one panel per beat, or only the 1-based beat ``positions`` given.
+
+    A selected beat keeps its own index, so its file is still
+    ``panel_<index>.png``: a resumed run renders only its missing beats and
+    never writes over a panel it keeps. Outputs follow beat order.
+    """
     run_dir = OUTPUT_ROOT / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     sheet_uris = {
@@ -264,7 +271,12 @@ def generate_storyboard(
         )
         for character in breakdown.characters
     }
-    total = len(breakdown.beats)
+    selected = [
+        (index, beat)
+        for index, beat in enumerate(breakdown.beats, start=1)
+        if positions is None or index in positions
+    ]
+    total = len(selected)
     callback_lock = threading.Lock()
     completed_panels = 0
 
@@ -312,8 +324,7 @@ def generate_storyboard(
 
     with ThreadPoolExecutor(max_workers=PANEL_CONCURRENCY) as executor:
         futures = [
-            executor.submit(render_panel, index, beat)
-            for index, beat in enumerate(breakdown.beats, start=1)
+            executor.submit(render_panel, index, beat) for index, beat in selected
         ]
         return [future.result() for future in futures]
 

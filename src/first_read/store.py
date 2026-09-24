@@ -267,9 +267,9 @@ def upsert_character_sheet(name: str, uri: str) -> None:
 def _current_character(client, name: str):
     """Return the current row for the newest identity carrying ``name``."""
     rows = client.query(
-        "SELECT character_id, version, sheet_gcs_uri, locked_fields, origin_id, "
+        "SELECT character_id, latest_version AS version, sheet_gcs_uri, locked_fields, origin_id, "
         "visitor_id, owner_id, created_at FROM ("
-        "SELECT character_id, max(version) AS version, "
+        "SELECT character_id, max(version) AS latest_version, "
         "argMax(name, version) AS name, argMax(sheet_gcs_uri, version) AS sheet_gcs_uri, "
         "argMax(locked_fields, version) AS locked_fields, "
         "argMax(origin_id, version) AS origin_id, "

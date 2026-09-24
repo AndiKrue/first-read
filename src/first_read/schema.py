@@ -56,6 +56,13 @@ class Beat(BaseModel):
     shot_type: Literal["WIDE", "MEDIUM", "CLOSE", "OTS"]
     characters_present: list[str]
 
+    @field_validator("characters_present", mode="before")
+    @classmethod
+    def _names_only(cls, value):
+        if isinstance(value, list):
+            return [item.get("name", "") if isinstance(item, dict) else item for item in value]
+        return value
+
     @field_validator("beat_id", mode="before")
     @classmethod
     def _coerce_beat_id(cls, value: object) -> str:

@@ -70,7 +70,7 @@ def _audio_bytes(response: dict | bytes) -> bytes:
     predictions = response.get("predictions") or []
     if not predictions:
         raise RuntimeError("Lyria returned no predictions")
-    encoded = predictions[0].get("audioContent") or predictions[0].get("audio_content")
+    encoded = (predictions[0].get("bytesBase64Encoded") or predictions[0].get("audioContent") or predictions[0].get("audio_content"))
     if not encoded:
         raise RuntimeError("Lyria returned no audio")
     return base64.b64decode(encoded)

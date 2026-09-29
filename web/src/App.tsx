@@ -11,6 +11,8 @@ type Run = {
   panel_urls: string[]
   audio_url: string | null
   audio_duration_seconds: number | null
+  score_url: string | null
+  score_error: string | null
   animatic_url: string | null
   error: string | null
 }
@@ -31,7 +33,7 @@ type StorySpec = { genre: string, setting: string, characters: string[], situati
 const emptyStorySpec: StorySpec = { genre: '', setting: '', characters: [], situation: '', tone: '' }
 const emptyRun: Run = {
   run_id: '', script_title: '', scene_slug: '', stage: 'ready', breakdown: null,
-  panel_urls: [], audio_url: null, audio_duration_seconds: null, animatic_url: null, error: null,
+  panel_urls: [], audio_url: null, audio_duration_seconds: null, score_url: null, score_error: null, animatic_url: null, error: null,
 }
 
 function RunFailure({ detail }: { detail: string }) {
@@ -65,11 +67,27 @@ function App() {
   const [writing, setWriting] = useState(false)
   const [storyError, setStoryError] = useState('')
   const [railOpen, setRailOpen] = useState(false)
+  const [mode, setMode] = useState<'simple' | 'pro'>('simple')
   const timer = useRef<number | null>(null)
   const screenplay = useRef<HTMLTextAreaElement>(null)
+  const railClose = useRef<HTMLButtonElement>(null)
+  const railToggle = useRef<HTMLButtonElement>(null)
   const isRunning = !['ready', 'done', 'failed'].includes(run.stage)
   const composeBusy = samplesLoading || writing || isRunning
   const cast = run.breakdown?.characters ?? []
+
+  useEffect(() => {
+    if (!railOpen) return
+    railClose.current?.focus()
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setRailOpen(false)
+        railToggle.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [railOpen])
 
   async function loadRuns() {
     setRunsError('')
@@ -235,11 +253,11 @@ function App() {
     finally { setSearching(false) }
   }
 
-  return <div className="site-shell">
+  return <div className={`site-shell mode-${mode}`}>
     <div className="app-layout">
       {railOpen && <button type="button" className="rail-scrim" aria-label="Close workspace rail" onClick={() => setRailOpen(false)} />}
-      <aside data-layout-region="rail" className={`rail ${railOpen ? 'rail-open' : ''}`} aria-label="Workspace rail">
-        <div className="rail-top"><div className="rail-brand"><h1>FIRST READ</h1><p>Script → voice → frame</p></div><button type="button" className="control-button secondary-button rail-new-scene" onClick={newScene}><span aria-hidden="true">＋</span> New scene</button></div>
+      <aside data-layout-region="rail" className={`rail ${railOpen ? 'rail-open' : ''}`} aria-label="Workspace rail" aria-hidden={mode === 'simple' && !railOpen}>
+        <div className="rail-top"><div className="rail-brand"><h1>FIRST READ</h1><p>Script → voice → frame → score</p><button ref={railClose} type="button" className="control-button rail-close" aria-label="Close workspace rail" onClick={() => { setRailOpen(false); railToggle.current?.focus() }}>Close</button></div><button type="button" className="control-button secondary-button rail-new-scene" onClick={newScene}><span aria-hidden="true">＋</span> New scene</button></div>
         <section data-layout-scroll="rail" className="rail-scroll" tabIndex={0} aria-label="Previous runs">
           <p className="eyebrow">Previous runs</p><div className="rail-gallery">
             {runsError && <div className="error-state"><span>{runsError}</span><button type="button" className="control-button" onClick={() => void loadRuns()}>Retry</button></div>}
@@ -267,13 +285,13 @@ function App() {
           <label className="field-label"><span className="eyebrow">Scene <span className="scene-format">Fountain format</span></span><textarea ref={screenplay} wrap="off" value={script} onChange={(event) => setScript(event.target.value)} required spellCheck={false} className="field scene-script font-mono text-sm" /></label>
           <label className="field-label"><span className="eyebrow">Script title</span><input value={title} onChange={(event) => setTitle(event.target.value)} required className="field text-lg" /></label>
           <details className="surface-panel-subtle"><summary>Generation access</summary><div className="details-fields"><label><span className="eyebrow">Optional Google API key</span><input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} className="field" /></label><p>Used only for this request to bypass the shared demo cap; it is not stored.</p></div></details>
-        </div><div className="compose-actions"><p>This produces AI-generated images and synthetic speech.</p><button data-testid="run-button" disabled={composeBusy} className="control-button primary-button">{samplesLoading ? 'Loading samples…' : isRunning ? `Working — ${run.stage}` : 'Hear it'}</button></div></form>
+        </div><div className="compose-actions"><p>Images, voices and music are generated automatically.</p><button data-testid="run-button" disabled={composeBusy} className="control-button primary-button">{samplesLoading ? 'Loading samples…' : isRunning ? `Working — ${run.stage}` : 'Hear it'}</button></div></form>
       </section>
 
-      <main data-layout-region="stage" className="stage-shell"><header className="stage-header"><button type="button" className="control-button icon-button rail-toggle" aria-label="Open workspace rail" aria-expanded={railOpen} onClick={() => setRailOpen(true)}><MenuIcon /></button><div className="min-w-0"><p className="eyebrow">{isRunning ? 'In production' : run.run_id ? 'Current run' : 'Workspace'}</p><h1>{run.script_title || title || 'Untitled scene'}</h1></div>{run.run_id && <button type="button" className="control-button stage-edit" onClick={() => document.getElementById('scene-idea')?.focus()}>Edit scene</button>}</header>
+      <main data-layout-region="stage" className="stage-shell"><header className="stage-header"><button ref={railToggle} data-testid="gallery-drawer-button" type="button" className="control-button icon-button rail-toggle" aria-label="Open workspace rail" aria-expanded={railOpen} onClick={() => setRailOpen(true)}><MenuIcon /></button><div className="min-w-0"><p className="eyebrow">{isRunning ? 'In production' : run.run_id ? 'Current run' : 'Workspace'}</p><h1>{run.script_title || title || 'Untitled scene'}</h1></div><div className="mode-switch" role="group" aria-label="Workspace mode"><button data-testid="simple-mode" type="button" className={`control-button ${mode === 'simple' ? 'active' : ''}`} aria-pressed={mode === 'simple'} onClick={() => { setMode('simple'); setRailOpen(false) }}>Simple</button><button data-testid="pro-mode" type="button" className={`control-button ${mode === 'pro' ? 'active' : ''}`} aria-pressed={mode === 'pro'} onClick={() => { setMode('pro'); setRailOpen(false) }}>Pro</button></div>{run.run_id && <button type="button" className="control-button stage-edit" onClick={() => document.getElementById('scene-idea')?.focus()}>Edit scene</button>}</header>
         <div data-layout-scroll="stage" className="stage">{!run.run_id && run.stage !== 'failed' && <section className="compose-stage"><div className="compose-intro"><p className="eyebrow">New scene</p><h2>Turn one scene into a first read.</h2><p>Compose, hear the voices, and inspect every frame without losing the thread.</p></div><div className="empty-frame">Your storyboard and performed read will appear here.</div></section>}{(run.run_id || run.stage === 'failed') && <section aria-live="polite" className={`run-status ${isRunning ? 'run-status-active' : ''}`}><div><span className={`status-dot ${isRunning ? 'animate-pulse' : ''}`} /><span>{run.stage}</span></div>{run.error && <RunFailure detail={run.error} />}</section>}
-          {(run.run_id || run.panel_urls.length > 0) && <section className="storyboard-surface surface-panel"><div className="surface-heading"><h2>Storyboard</h2><span>{run.panel_urls.length} frames</span></div>{run.panel_urls.length ? <><div className="selected-panel"><img src={run.panel_urls[Math.min(activePanel, run.panel_urls.length - 1)]} alt={`Storyboard panel ${activePanel + 1}`} /></div><div className="panel-strip">{run.panel_urls.map((url, index) => <button key={`${url}:${index}`} type="button" onClick={() => setActivePanel(index)} className={`control-button panel-thumb ${index === activePanel ? 'active' : ''}`} aria-label={`Show panel ${index + 1}`} aria-pressed={index === activePanel}><img src={url} alt="" /><span>Panel {String(index + 1).padStart(2, '0')}</span></button>)}</div></> : <div className="empty-frame">Panels arrive here as they are drawn.</div>}</section>}
-        </div>{run.audio_url && <section className="read-surface surface-panel"><p className="eyebrow">The read</p><audio aria-label="Scene table read" controls src={run.audio_url} onTimeUpdate={(event) => syncPanel(event.currentTarget.currentTime)} onEnded={() => setActivePanel(Math.max(run.panel_urls.length - 1, 0))} />{run.animatic_url && <a href={run.animatic_url} download>Download MP4</a>}</section>}</main>
+          {(run.run_id || run.panel_urls.length > 0) && <section data-testid="result-view" className="storyboard-surface surface-panel"><div className="surface-heading"><h2>Storyboard</h2><span>{run.panel_urls.length} frames</span></div>{run.panel_urls.length ? <><div className="selected-panel" data-testid="selected-frame"><img src={run.panel_urls[Math.min(activePanel, run.panel_urls.length - 1)]} alt={`Storyboard panel ${activePanel + 1}`} /></div><div className="panel-strip">{run.panel_urls.map((url, index) => <button key={`${url}:${index}`} type="button" onClick={() => setActivePanel(index)} className={`control-button panel-thumb ${index === activePanel ? 'active' : ''}`} aria-label={`Show panel ${index + 1}`} aria-pressed={index === activePanel}><img src={url} alt="" /><span>Panel {String(index + 1).padStart(2, '0')}</span></button>)}</div></> : <div className="empty-frame">Panels arrive here as they are drawn.</div>}</section>}
+        </div>{run.audio_url && <section className="read-surface surface-panel"><div className="read-heading"><p className="eyebrow">The read</p><span className="eyebrow">Music · Automatic</span></div><audio data-testid="read-player" aria-label="Scene table read" controls src={run.audio_url} onTimeUpdate={(event) => syncPanel(event.currentTarget.currentTime)} onEnded={() => setActivePanel(Math.max(run.panel_urls.length - 1, 0))} />{run.score_error && <p className="score-note" role="status">Music is unavailable for this read.</p>}{run.animatic_url && <a href={run.animatic_url} download>Download MP4</a>}</section>}</main>
     </div><LegalFooter />
   </div>
 }

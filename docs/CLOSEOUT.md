@@ -122,3 +122,42 @@ The tests cover:
 Not verified here: no request reached the real shared ClickHouse or GCS. The
 column check and the ten real runs remain host/deployment work. The duplicate
 resume guard is per process; the service runs up to three instances.
+
+## WO-PUBLIC-02-v2 — public interface and music
+
+The operator did not supply a private source commit with this builder run, and
+the private repository was unavailable here. The public interface was updated
+from this work order's requirements; an exact private-commit comparison remains
+for host review. The public app now offers Simple and Pro layouts, a gallery
+drawer with Escape and focus return, a 16:9 result frame, selected-frame and
+read-player test IDs, and a visible Automatic music label. Scene generation,
+samples, gallery selection, memory search, optional API key, playback and MP4
+download continue to use the public API. Billing, tiers, RevenueCat, ads, ad
+consent, sign-in, accounts, cast library, scratchbook, revisions and takes were
+left out. A static test checks all browser fetch targets against public routes.
+
+New runs request music by default. After the table read, a `scoring` stage calls
+Vertex Lyria with the breakdown tone as musical direction and an instrumental,
+dialogue-safe prompt. `score_uri`, `scored_audio_uri` and `score_error` are
+persisted in the run. FFmpeg ducks music under the read and fades the edges in
+both the animatic and a scored WAV derivative for the read player. The existing
+shared hourly cap is unchanged. If Lyria fails, the run still reaches `done`
+with its unscored read and animatic; `score_error` explains why. A failed preview
+mix leaves the score available for the animatic and records the preview error.
+
+`POST /api/runs/{run_id}/score` uses the resume endpoint's
+`FIRST_READ_ADMIN_TOKEN`, returns 404 without it, and is hidden from OpenAPI.
+For a finished run it generates music and reassembles derived media under the
+same run ID, panel URIs and read URI. A failed backfill preserves the old
+animatic and finished state. A successful backfill publishes the animatic at
+`animatic_scored.mp4` so an existing silent MP4 cache is not reused.
+`scripts/backfill_gallery_scores.py` iterates
+finished gallery runs sequentially and reports scored, failed and skipped
+counts. Builder backfill result: **0 scored, 0 failures, 0 attempted**; the
+public service and its host credentials are unavailable in this container.
+
+Builder checks: targeted Python tests and the static browser API check pass.
+`npm run build` could not start because `web/node_modules` is absent, and this
+run forbids package installation. The host must build, run Simple through to
+an audible result, inspect Pro at desktop width, deploy, make one live scored
+run, and run the gallery backfill with three spot checks in that order.

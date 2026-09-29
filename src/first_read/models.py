@@ -7,6 +7,7 @@ REASONING_MODEL = "gemini-2.5-pro"
 REASONING_FALLBACK_MODEL = "gemini-2.5-flash"
 STORYBOARD_MODEL = "gemini-2.5-flash-image"
 TABLE_READ_MODEL = "gemini-2.5-pro-tts"
+SCORE_MODEL = os.environ.get("SCORE_MODEL", "lyria-002")
 
 RANDOMIZE_POOLS = {
     "genre": [
@@ -82,4 +83,6 @@ MIN_PANEL_SECONDS = 2.5
 OUTPUT_ROOT = Path(os.environ.get("FIRST_READ_OUTPUT_DIR", "/tmp/first-read"))
 PANEL_FILENAME = "panel_{index:02d}.png"
 AUDIO_FILENAME = "tableread.wav"
+SCORE_FILENAME = "score.wav"
+SCORED_READ_FILENAME = "scored_read.wav"
 ANIMATIC_FILENAME = "animatic.mp4"

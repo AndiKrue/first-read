@@ -32,6 +32,7 @@ from first_read.models import (
     OUTPUT_ROOT,
     PANEL_FILENAME,
     RANDOMIZE_POOLS,
+    SCORE_FILENAME,
 )
 from first_read.parse import parse_fountain
 from first_read.schema import (
@@ -40,6 +41,7 @@ from first_read.schema import (
     PanelOutput,
     RunRecord,
     Scene,
+    ScoreOutput,
     StoryResponse,
     StorySpec,
 )
@@ -47,8 +49,9 @@ from first_read.store import initialize_schema, upsert_character, upsert_run
 from first_read.tools import breakdown as breakdown_module
 from first_read.tools import storyboard as storyboard_module
 from first_read.tools import tableread as tableread_module
-from first_read.tools.assemble import assemble_animatic
+from first_read.tools.assemble import assemble_animatic, mix_scored_read
 from first_read.tools.breakdown import generate_breakdown
+from first_read.tools.score import generate_score
 from first_read.tools.story import generate_scene
 from first_read.tools.storyboard import generate_storyboard
 from first_read.tools.tableread import generate_table_read
@@ -57,6 +60,7 @@ from first_read.tools.tableread import generate_table_read
 class PrevizRequest(BaseModel):
     script_title: str = Field(min_length=1, max_length=200)
     fountain_text: str = Field(min_length=1)
+    with_score: bool = True
 
 
 class RunResponse(BaseModel):
@@ -68,6 +72,8 @@ class RunResponse(BaseModel):
     panel_urls: list[str] = Field(default_factory=list)
     audio_url: str | None = None
     audio_duration_seconds: float | None = None
+    score_url: str | None = None
+    score_error: str | None = None
     animatic_url: str | None = None
     error: str | None = None
 
@@ -169,7 +175,8 @@ def _run_response(record: RunRecord) -> RunResponse:
             return None
 
     panel_urls = [url for uri in record.panel_uris if (url := browser_url(uri))]
-    audio_url = browser_url(record.audio_uri)
+    audio_url = browser_url(record.scored_audio_uri) or browser_url(record.audio_uri)
+    score_url = browser_url(record.score_uri)
     animatic_url = browser_url(record.animatic_uri)
     return RunResponse(
         run_id=record.run_id,
@@ -180,9 +187,59 @@ def _run_response(record: RunRecord) -> RunResponse:
         panel_urls=panel_urls,
         audio_url=audio_url,
         audio_duration_seconds=(record.duration_seconds if audio_url else None),
+        score_url=score_url,
+        score_error=record.score_error or None,
         animatic_url=animatic_url,
         error=record.error or None,
     )
+
+
+async def _try_score(
+    record: RunRecord, scene: Scene, breakdown: Breakdown, audio: AudioOutput
+) -> ScoreOutput | None:
+    """Music is optional: preserve the read and record the score failure."""
+    await _transition(record, "scoring")
+    try:
+        score = await asyncio.to_thread(
+            generate_score, scene, breakdown, record.run_id, record.script_title
+        )
+        record.score_uri = score.gcs_uri
+        record.score_error = ""
+        await asyncio.to_thread(_touch_and_upsert, record)
+    except Exception as error:  # noqa: BLE001 - score must not fail a run
+        record.score_error = f"Music unavailable: {type(error).__name__}: {error}"[:500]
+        await asyncio.to_thread(_touch_and_upsert, record)
+        return None
+    try:
+        record.scored_audio_uri = await asyncio.to_thread(
+            mix_scored_read, audio, score, record.run_id
+        )
+        await asyncio.to_thread(_touch_and_upsert, record)
+    except Exception as error:  # noqa: BLE001 - video can still carry the score
+        record.score_error = (
+            f"Scored read unavailable: {type(error).__name__}: {error}"[:500]
+        )
+        await asyncio.to_thread(_touch_and_upsert, record)
+    return score
+
+
+async def _assemble(
+    scene: Scene,
+    breakdown: Breakdown,
+    panels: list[PanelOutput],
+    audio: AudioOutput,
+    record: RunRecord,
+    score: ScoreOutput | None,
+    *,
+    output_name: str | None = None,
+):
+    args = (scene, breakdown, panels, audio, record.run_id, record.script_title)
+    kwargs = {}
+    if score is not None:
+        kwargs["score"] = score
+    if output_name is not None:
+        kwargs["output_name"] = output_name
+    return await asyncio.to_thread(assemble_animatic, *args, **kwargs)
 
 
 async def _run_pipeline(
@@ -228,16 +285,14 @@ async def _run_pipeline(
         record.audio_uri = audio.gcs_uri
         record.duration_seconds = audio.duration_seconds
 
-        await _transition(record, "assembling")
-        animatic = await asyncio.to_thread(
-            assemble_animatic,
-            scene,
-            breakdown,
-            panels,
-            audio,
-            run_id,
-            request.script_title,
+        score = (
+            await _try_score(record, scene, breakdown, audio)
+            if request.with_score
+            else None
         )
+
+        await _transition(record, "assembling")
+        animatic = await _assemble(scene, breakdown, panels, audio, record, score)
         record.animatic_uri = animatic.gcs_uri
         # A new run has no error here; a resumed early run drops its old one.
         record.error = ""
@@ -295,11 +350,13 @@ async def random_story() -> StorySpec:
 
 @app.get("/api/runs", response_model=list[RunResponse])
 async def get_runs(limit: int = Query(default=24, ge=1, le=200)) -> list[RunResponse]:
+    await asyncio.to_thread(initialize_schema)
     return [_run_response(record) for record in await list_durable_runs(limit)]
 
 
 @app.get("/api/runs/{run_id}", response_model=RunResponse)
 async def get_run(run_id: str) -> RunResponse:
+    await asyncio.to_thread(initialize_schema)
     record = _runs.get(run_id)
     if record is None:
         record = await get_durable_run(run_id)
@@ -332,6 +389,7 @@ _RESUMABLE_STAGES = frozenset({"failed", "cancelled"})
 _GCS_URI = re.compile(r"^gs://[^/]+/.+")
 # Per-process guard against a second resume of a run this process is resuming.
 _resuming: set[str] = set()
+_scoring: set[str] = set()
 _resuming_lock = threading.Lock()
 
 
@@ -558,6 +616,18 @@ def _kept_audio(record: RunRecord) -> AudioOutput:
     )
 
 
+def _kept_score(record: RunRecord) -> ScoreOutput:
+    local_path = _download_to(
+        record.score_uri, OUTPUT_ROOT / record.run_id / SCORE_FILENAME
+    )
+    return ScoreOutput(
+        url=signed_url_for_uri(record.score_uri),
+        gcs_uri=record.score_uri,
+        local_path=str(local_path),
+        duration_seconds=0,
+    )
+
+
 def _panels_for_assembly(
     run_id: str,
     breakdown: Breakdown,
@@ -642,19 +712,19 @@ async def _resume_partial(record: RunRecord, plan: _ResumePlan) -> None:
             record.audio_uri = audio.gcs_uri
             record.duration_seconds = audio.duration_seconds
 
+        if record.score_uri:
+            try:
+                score = await asyncio.to_thread(_kept_score, record)
+            except Exception:  # noqa: BLE001 - regenerate an unavailable score
+                score = await _try_score(record, scene, breakdown, audio)
+        else:
+            score = await _try_score(record, scene, breakdown, audio)
+
         await _transition(record, "assembling")
         panels = await asyncio.to_thread(
             _panels_for_assembly, run_id, breakdown, uris, rendered
         )
-        animatic = await asyncio.to_thread(
-            assemble_animatic,
-            scene,
-            breakdown,
-            panels,
-            audio,
-            run_id,
-            record.script_title,
-        )
+        animatic = await _assemble(scene, breakdown, panels, audio, record, score)
         record.animatic_uri = animatic.gcs_uri
         record.error = ""
         await _transition(record, "done")
@@ -699,6 +769,7 @@ async def resume_run(run_id: str, request: Request, background_tasks: Background
     # The body is read by hand so nothing, not even a 422 for bad JSON, is
     # answered before the token check.
     _require_admin(request.headers.get("authorization"))
+    await asyncio.to_thread(initialize_schema)
     try:
         body = ResumeRequest.model_validate_json(await request.body() or b"{}")
     except ValidationError as error:
@@ -731,6 +802,84 @@ async def resume_run(run_id: str, request: Request, background_tasks: Background
     _runs[run_id] = record
     background_tasks.add_task(_resume_pipeline, record, plan)
     return {"run_id": run_id, "resume": plan.kind}
+
+
+async def _score_finished(
+    record: RunRecord, scene: Scene, breakdown: Breakdown
+) -> None:
+    """Score a finished gallery run and replace only its derived media."""
+    original_animatic = record.animatic_uri
+    try:
+        audio = await asyncio.to_thread(_kept_audio, record)
+        score = await _try_score(record, scene, breakdown, audio)
+        if score is None:
+            return
+        panels = await asyncio.to_thread(
+            _panels_for_assembly,
+            record.run_id,
+            breakdown,
+            _kept_panels(record, breakdown),
+            {},
+        )
+        await _transition(record, "assembling")
+        animatic = await _assemble(
+            scene,
+            breakdown,
+            panels,
+            audio,
+            record,
+            score,
+            output_name="animatic_scored.mp4",
+        )
+        record.animatic_uri = animatic.gcs_uri
+    except Exception as error:  # noqa: BLE001 - keep the existing finished run
+        record.animatic_uri = original_animatic
+        record.score_error = f"Music backfill failed: {type(error).__name__}: {error}"[
+            :500
+        ]
+    finally:
+        record.stage = "done"
+        with suppress(Exception):
+            await asyncio.to_thread(_touch_and_upsert, record)
+        with _resuming_lock:
+            _scoring.discard(record.run_id)
+
+
+@app.post("/api/runs/{run_id}/score", status_code=202, include_in_schema=False)
+async def score_run(run_id: str, request: Request, background_tasks: BackgroundTasks):
+    _require_admin(request.headers.get("authorization"))
+    await asyncio.to_thread(initialize_schema)
+    record = await get_durable_run(run_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    if record.stage != "done":
+        raise HTTPException(status_code=409, detail="Only a finished run can be scored")
+    if not record.breakdown_json or not record.audio_uri or not record.panel_uris:
+        raise HTTPException(
+            status_code=409, detail="Run has no complete read and panels"
+        )
+    try:
+        breakdown = Breakdown.model_validate_json(record.breakdown_json)
+        scene = parse_fountain(record.scene_slug)
+    except (ValidationError, ValueError) as error:
+        raise HTTPException(
+            status_code=409, detail="Stored scene is unreadable"
+        ) from error
+    scene.characters = list(record.characters) or [
+        character.name for character in breakdown.characters
+    ]
+    with _resuming_lock:
+        if run_id in _scoring:
+            raise HTTPException(
+                status_code=409, detail="This run is already being scored"
+            )
+        _scoring.add(run_id)
+    _as_utc(record)
+    record.stage = "scoring"
+    _runs[run_id] = record
+    await asyncio.to_thread(_touch_and_upsert, record)
+    background_tasks.add_task(_score_finished, record, scene, breakdown)
+    return {"run_id": run_id, "score": "queued"}
 
 
 @app.get("/api/samples", response_model=list[SampleResponse])

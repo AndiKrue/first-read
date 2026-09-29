@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS runs (
   breakdown_json   String DEFAULT '',
   panel_uris       Array(String),
   audio_uri        String DEFAULT '',
+  score_uri        String DEFAULT '',
+  scored_audio_uri String DEFAULT '',
+  score_error      String DEFAULT '',
   animatic_uri     String DEFAULT '',
   duration_seconds Float32 DEFAULT 0
 ) ENGINE = ReplacingMergeTree(updated_at) ORDER BY run_id
@@ -85,6 +88,9 @@ RUN_COLUMNS = (
     "breakdown_json",
     "panel_uris",
     "audio_uri",
+    "score_uri",
+    "scored_audio_uri",
+    "score_error",
     "animatic_uri",
     "duration_seconds",
 )
@@ -135,6 +141,12 @@ def initialize_schema() -> None:
         client = get_client()
         client.command(ASSETS_DDL)
         client.command(RUNS_DDL)
+        client.command(
+            "ALTER TABLE runs "
+            "ADD COLUMN IF NOT EXISTS score_uri String DEFAULT '', "
+            "ADD COLUMN IF NOT EXISTS scored_audio_uri String DEFAULT '', "
+            "ADD COLUMN IF NOT EXISTS score_error String DEFAULT ''"
+        )
         _SCHEMA_READY = True
 
 

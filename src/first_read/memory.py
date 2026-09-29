@@ -160,7 +160,7 @@ async def search_assets(
 _RUN_SELECT = (
     "run_id, created_at, updated_at, script_title, scene_slug, int_ext, "
     "time_of_day, tone, characters, stage, error, breakdown_json, panel_uris, "
-    "audio_uri, animatic_uri, duration_seconds"
+    "audio_uri, score_uri, scored_audio_uri, score_error, animatic_uri, duration_seconds"
 )
 
 

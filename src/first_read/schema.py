@@ -114,7 +114,7 @@ class Asset(BaseModel):
 
     run_id: str
     created_at: datetime | None = None
-    asset_type: Literal["sheet", "panel", "audio", "animatic"]
+    asset_type: Literal["sheet", "panel", "audio", "score", "animatic"]
     script_title: str
     scene_slug: str
     beat_id: str = ""
@@ -144,6 +144,10 @@ class AudioOutput(BaseModel):
     duration_seconds: float
 
 
+class ScoreOutput(AudioOutput):
+    pass
+
+
 class AnimaticOutput(BaseModel):
     url: str
     gcs_uri: str
@@ -167,6 +171,9 @@ class RunRecord(BaseModel):
     breakdown_json: str = ""
     panel_uris: list[str] = Field(default_factory=list)
     audio_uri: str = ""
+    score_uri: str = ""
+    scored_audio_uri: str = ""
+    score_error: str = ""
     animatic_uri: str = ""
     duration_seconds: float = 0.0
     # The beat each ``panel_uris`` entry depicts. The column exists in the shared

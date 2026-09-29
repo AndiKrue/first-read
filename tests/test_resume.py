@@ -21,6 +21,7 @@ from first_read.schema import (
     Breakdown,
     PanelOutput,
     RunRecord,
+    ScoreOutput,
 )
 from first_read.tools import storyboard as storyboard_module
 
@@ -84,7 +85,10 @@ class World:
         self.downloads: list[str] = []
         self.breakdowns: list = []
         self.table_reads: list = []
+        self.scores: list[str] = []
+        self.score_error: Exception | None = None
         self.assembled: list[list[PanelOutput]] = []
+        self.assembled_scores: list[ScoreOutput | None] = []
         self.recorded_characters: list[str] = []
         self.remembered = {
             "JUNE": {"visual_description": "40s", "wardrobe": "", "voice_name": "Kore"},
@@ -105,12 +109,15 @@ class World:
         monkeypatch.setattr(api, "initialize_schema", lambda: None)
         monkeypatch.setattr(api, "upsert_run", self.upsert_run)
         monkeypatch.setattr(api, "get_resumable_run", self.get_run)
+        monkeypatch.setattr(api, "get_durable_run", self.get_run)
         monkeypatch.setattr(api, "lookup_characters", self.lookup_characters)
         monkeypatch.setattr(api, "upsert_character", self.upsert_character)
         monkeypatch.setattr(api, "download_bytes", self.download_bytes)
         monkeypatch.setattr(api, "signed_url_for_uri", self.browser_url)
         monkeypatch.setattr(api, "generate_breakdown", self.generate_breakdown)
         monkeypatch.setattr(api, "generate_table_read", self.generate_table_read)
+        monkeypatch.setattr(api, "generate_score", self.generate_score)
+        monkeypatch.setattr(api, "mix_scored_read", self.mix_scored_read)
         monkeypatch.setattr(api, "assemble_animatic", self.assemble_animatic)
         # The real generate_storyboard runs; only its model and storage edges
         # are replaced.
@@ -182,15 +189,43 @@ class World:
             duration_seconds=14.5,
         )
 
-    def assemble_animatic(self, scene, breakdown, panels, audio, run_id, title):
+    def generate_score(self, scene, breakdown, run_id, script_title):
+        self.scores.append(run_id)
+        if self.score_error:
+            raise self.score_error
+        local = self.tmp / run_id / "score.wav"
+        local.parent.mkdir(parents=True, exist_ok=True)
+        local.write_bytes(b"score")
+        return ScoreOutput(
+            url="https://score",
+            gcs_uri=f"{BUCKET}/runs/{run_id}/score.wav",
+            local_path=str(local),
+            duration_seconds=14.5,
+        )
+
+    def mix_scored_read(self, audio, score, run_id):
+        return f"{BUCKET}/runs/{run_id}/scored_read.wav"
+
+    def assemble_animatic(
+        self,
+        scene,
+        breakdown,
+        panels,
+        audio,
+        run_id,
+        title,
+        score=None,
+        output_name="animatic.mp4",
+    ):
         for panel in panels:
             assert Path(panel.local_path).is_file(), panel
         assert Path(audio.local_path).is_file()
         self.assembled.append(list(panels))
+        self.assembled_scores.append(score)
         return AnimaticOutput(
             url="https://animatic",
-            gcs_uri=f"{BUCKET}/runs/{run_id}/animatic.mp4",
-            local_path=str(self.tmp / run_id / "animatic.mp4"),
+            gcs_uri=f"{BUCKET}/runs/{run_id}/{output_name}",
+            local_path=str(self.tmp / run_id / output_name),
         )
 
     # Helpers --------------------------------------------------------------
@@ -309,6 +344,9 @@ def test_partial_run_keeps_stored_panels_and_renders_only_the_missing_one(world)
         "panels 5/6",
         "panels 6/6",
         "reading",
+        "scoring",
+        "scoring",
+        "scoring",
         "assembling",
         "done",
     ]
@@ -355,6 +393,9 @@ def test_partial_run_without_beat_ids_gets_them_from_its_breakdown_in_order(worl
     assert [version.stage for version in world.writes] == [
         "panels 5/5",
         "reading",
+        "scoring",
+        "scoring",
+        "scoring",
         "assembling",
         "done",
     ]
@@ -466,6 +507,9 @@ def test_early_run_resumes_with_the_scene_and_finishes_under_its_run_id(world):
         "panels 4/5",
         "panels 5/5",
         "reading",
+        "scoring",
+        "scoring",
+        "scoring",
         "assembling",
         "done",
     ]
@@ -620,6 +664,12 @@ def test_previz_still_creates_a_new_run_and_completes_it(world):
     assert run_id not in (PARTIAL_ID, NO_BEAT_IDS_ID, EARLY_ID)
     final = world.db[run_id]
     assert final.stage == "done"
+    assert final.score_uri == f"{BUCKET}/runs/{run_id}/score.wav"
+    assert final.scored_audio_uri == f"{BUCKET}/runs/{run_id}/scored_read.wav"
+    assert world.assembled_scores[-1] is not None
+    visible = world.client.get(f"/api/runs/{run_id}").json()
+    assert visible["audio_url"].endswith(f"/runs/{run_id}/scored_read.wav")
+    assert visible["score_url"].endswith(f"/runs/{run_id}/score.wav")
     assert final.error == ""
     assert final.script_title == TITLE
     assert len(final.panel_uris) == 5
@@ -630,6 +680,47 @@ def test_previz_still_creates_a_new_run_and_completes_it(world):
     ]
     assert all(version.panel_beat_ids == [] for version in world.writes)
     assert world.reads == []
+
+
+def test_a_failing_score_call_keeps_the_run_done_without_music(world):
+    world.score_error = RuntimeError("Lyria unavailable")
+    response = world.client.post(
+        "/api/previz", json={"script_title": TITLE, "fountain_text": SCENE}
+    )
+    final = world.db[response.json()["run_id"]]
+    assert final.stage == "done"
+    assert final.score_uri == ""
+    assert final.scored_audio_uri == ""
+    assert "Lyria unavailable" in final.score_error
+    assert final.animatic_uri
+    assert world.assembled_scores[-1] is None
+
+
+def test_score_endpoint_is_hidden_and_reassembles_a_finished_run(world):
+    response = world.client.post(
+        "/api/previz", json={"script_title": TITLE, "fountain_text": SCENE}
+    )
+    run_id = response.json()["run_id"]
+    original = world.db[run_id].model_copy(deep=True)
+    before = len(world.assembled)
+    assert world.client.post(f"/api/runs/{run_id}/score").status_code == 404
+    assert len(world.assembled) == before
+    result = world.client.post(f"/api/runs/{run_id}/score", headers=AUTH)
+    assert result.status_code == 202
+    final = world.db[run_id]
+    assert final.stage == "done"
+    assert final.run_id == original.run_id
+    assert final.created_at == original.created_at
+    assert final.panel_uris == original.panel_uris
+    assert final.audio_uri == original.audio_uri
+    assert final.animatic_uri == f"{BUCKET}/runs/{run_id}/animatic_scored.mp4"
+    assert final.animatic_uri != original.animatic_uri
+    assert len(world.assembled) == before + 1
+    assert world.assembled_scores[-1] is not None
+    assert (
+        "/api/runs/{run_id}/score"
+        not in world.client.get("/openapi.json").json()["paths"]
+    )
 
 
 def test_previz_keeps_its_shared_hourly_cap(world, monkeypatch):

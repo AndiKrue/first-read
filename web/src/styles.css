@@ -137,12 +137,31 @@
 
 .rail-scrim { display: none; }
 
+.mode-switch { display: flex; margin-left: auto; gap: 0.25rem; border: 1px solid theme('colors.border-faint'); padding: 0.2rem; }
+.mode-switch .control-button { min-width: 4rem; padding: 0.35rem 0.6rem; font-size: 0.72rem; border-color: transparent; }
+.mode-switch .control-button.active { border-color: theme('colors.signal'); color: theme('colors.paper'); background: theme('colors.surface-accent'); }
+.rail-close { display: none; margin-top: 0.75rem; padding: 0.25rem 0.75rem; font-size: 0.75rem; }
+.read-heading { display: flex; justify-content: space-between; gap: 1rem; }
+.score-note { font-size: 0.75rem; color: theme('colors.subtle'); }
+.selected-panel { aspect-ratio: 16 / 9; min-height: 0; }
+.selected-panel img { display: block; width: 100%; height: 100%; object-fit: contain; }
+
+@media (min-width: 1024px) {
+  .mode-simple .app-layout { grid-template-columns: minmax(20rem, var(--compose-width, 384px)) minmax(0, 1fr); }
+  .mode-simple .rail { position: fixed; inset: 0 auto 0 0; z-index: 31; visibility: hidden; transform: translateX(-100%); transition: transform 180ms ease; }
+  .mode-simple .rail.rail-open { visibility: visible; transform: translateX(0); }
+  .mode-simple .rail-scrim { display: block; position: fixed; inset: 0; z-index: 30; width: 100%; background: rgb(0 0 0 / 0.6); border: 0; }
+  .mode-simple .rail-toggle { display: inline-flex; }
+  .mode-simple .rail-close { display: inline-flex; }
+}
+
 @media (max-width: 1023px) {
   .app-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 2fr) minmax(0, 3fr); }
   .rail { position: fixed; inset: 0 auto 2.75rem 0; visibility: hidden; transform: translateX(-100%); transition: transform 180ms ease; }
   .rail.rail-open { visibility: visible; transform: translateX(0); }
   .rail-scrim { display: block; position: fixed; inset: 0 0 2.75rem; z-index: 25; width: 100%; height: auto; background: rgb(0 0 0 / 0.6); border: 0; }
   .rail-toggle { display: inline-flex; }
+  .rail-close { display: inline-flex; }
   .stage-header { padding: 0.5rem 1rem; }
   .stage { padding: 1rem; }
   .compose-fields { padding: 1rem; }
@@ -155,6 +174,7 @@
   .compose-intro h2 { font-size: 1.5rem; }
   .selected-panel { min-height: 8rem; }
   .stage-edit { display: none; }
+  .mode-switch .control-button { min-width: 3.2rem; }
 }
 
 :focus-visible { outline: 2px solid theme('colors.signal'); outline-offset: 2px; box-shadow: 0 0 0 2px theme('colors.ink'); }
